@@ -1,0 +1,1 @@
+/usr/bin/postgres "-D" "db_data" "-p" "5432" "-h" "127.0.0.1" "-k" "."

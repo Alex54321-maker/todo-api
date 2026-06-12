@@ -1,0 +1,10 @@
+{
+  "ports": {
+    "8000": {
+      "name": "App",
+      "description": "Main application port",
+      "onOpen": "open-browser",
+      "visibility": "public"
+    }
+  }
+}

@@ -1,0 +1,1 @@
+/usr/bin/postgres "-D" "/home/user/todo-api/.postgres_data" "-k" "/home/user/todo-api/.postgres_data"
