@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Фронтенд-Штурм: Проект №2</title>
+    <!-- Подключаем Bootstrap для красоты, так как в коде есть его классы (text-muted, mb-1) -->
+    <link href="https://jsdelivr.net" rel="stylesheet">
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; }
+        .app-container { max-width: 800px; margin: 0 auto; }
+        .post-card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .comments-section { background: #f1f3f5; padding: 15px; border-radius: 6px; margin-top: 15px; }
+        .comment-item { border-left: 3px solid #0d6efd; padding-left: 10px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    
+    <!-- БЛОК АВТОРИЗАЦИИ -->
+    <div class="card p-3 mb-4">
+        <h4>🔐 Авторизация</h4>
+        <div id="auth-inputs">
+            <input type="text" id="auth-username" placeholder="Логин" class="form-control mb-2">
+            <input type="password" id="auth-password" placeholder="Пароль" class="form-control mb-2">
+            <button onclick="loginWithoutForm()" class="btn btn-primary w-100">Войти</button>
+        </div>
+        <div id="auth-status" style="display: none;" class="alert alert-success m-0">
+            Вы успешно авторизованы!
+        </div>
+    </div>
+
+    <!-- БЛОК ЗАДАЧ (TODOS) -->
+    <div class="card p-3 mb-4">
+        <h4>📋 Мои задачи</h4>
+        <div class="input-group mb-3">
+            <input type="text" id="todo-title" placeholder="Новая задача..." class="form-control">
+            <button onclick="addTodo()" class="btn btn-success">Добавить</button>
+        </div>
+        <ul id="todo-list" class="list-group">
+            <!-- Сюда JS загрузит тудушки -->
+        </ul>
+    </div>
+
+    <!-- БЛОК ЖИВОЙ ЛЕНТЫ (ПОСТЫ) -->
+    <h4 class="mb-3">🚀 Живая лента из PostgreSQL</h4>
+    <div id="postsContainer">
+        <!-- СТАРОГО ХАРДКОДА НЕТ! JavaScript сам построит карточки здесь -->
+    </div>
+
+</div>
+
+<script>
+    // Глобальные переменные
+    const API_URL = '/api/v1';
+    let jwtToken = localStorage.getItem("access_token") || null;
+
+    // ХУК ЗАГРУЗКИ СТРАНИЦЫ
+    document.addEventListener("DOMContentLoaded", () => {
+        // Восстанавливаем сессию, если токен есть
+        if (jwtToken) {
+            updateAuthUI(true);
+        }
+        // Загружаем данные из базы данных
+        fetchTodos();
+        loadDynamicPosts(); 
+    });
+
+    // Управление интерфейсом авторизации
+    function updateAuthUI(isAuth) {
+        const inputs = document.getElementById("auth-inputs");
+        const status = document.getElementById("auth-status");
+        if (isAuth) {
+            inputs.style.display = "none";
+            status.style.display = "block";
+        } else {
+            inputs.style.display = "block";
+            status.style.display = "none";
+        }
+    }
+
+    // ВХОД
+    async function loginWithoutForm() {
+        const usernameEl = document.getElementById("auth-username");
+        const passwordEl = document.getElementById("auth-password");
+        if (!usernameEl || !passwordEl) return;
+
+        const username = usernameEl.value;
+        const password = passwordEl.value;
+        
+        const formData = new URLSearchParams();
+        formData.append("username", username);
+        formData.append("password", password);
+
+        try {
+            const response = await fetch(`${API_URL}/auth/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: formData
+            });
+
+            if (!response.ok) throw new Error("Ошибка авторизации");
+            const data = await response.json();
+            
+            localStorage.setItem("access_token", data.access_token);
+            jwtToken = data.access_token; 
+            
+            updateAuthUI(true);
+            fetchTodos(); // Перезагружаем задачи с токеном
+
+        } catch (error) {
+            console.error("Сбой при входе:", error);
+            alert("Неверный логин или пароль!");
+            updateAuthUI(false);
+        }
+    }
+
+    
+        // 1. ДИНАМИЧЕСКИЙ РЕНДЕРИНГ ЛЕНТЫ (ПОЛНАЯ СБОРКА С КНОПКАМИ)
+        async function loadDynamicPosts() {
+        const container = document.getElementById("postsContainer");
+        if (!container) return;
+
+        try {
+            const response = await fetch(`${API_URL}/posts/`);
+            if (!response.ok) throw new Error("Ошибка загрузки ленты");
+
+            const posts = await response.json();
+            container.innerHTML = ""; // Стираем старый хардкод
+
+            posts.forEach(post => {
+                const card = document.createElement("div");
+                card.className = "post-card";
+                
+                // Проверяем, есть ли картинка у поста
+                const imgHtml = post.image_url ? `<img src="${post.image_url}" class="img-fluid rounded mb-2" style="max-height: 300px; object-fit: cover;">` : '';
+
+                // ВШИВАЕМ ВСЕ КНОПКИ И ДИНАМИЧЕСКИЕ ID
+                card.innerHTML = `
+                    ${imgHtml}
+                    <h3>Пост #${post.id}</h3>
+                    <p>${escapeHtml(post.caption || "Пустой пост")}</p>
+                    <small class="text-muted d-block mb-2">Автор: Пользователь #${post.user_id}</small>
+                    
+                    <div class="post-actions">
+                        <!-- Кнопка Лайка -->
+                        <button class="btn btn-outline-danger btn-sm me-2" onclick="toggleLike(${post.id})">
+                            ❤️ <span id="like-count-${post.id}">${post.likes_count || 0}</span>
+                        </button>
+                        
+                        <!-- ВОТ ТВОЯ КНОПКА КОММЕНТАРИЕВ — ОНА СИДИТ ТУТ! -->
+                        <button class="btn btn-outline-secondary btn-sm" onclick="toggleComments(${post.id})">
+                            💬 Комментарии
+                        </button>
+                    </div>
+                    
+                    <!-- Секция комментариев (по умолчанию скрыта) -->
+                    <div id="comments-section-${post.id}" class="comments-section" style="display: none;">
+                        <!-- Сюда JS будет дописывать комментарии из базы -->
+                        <div id="comments-list-${post.id}"></div>
+                        
+                        <!-- Форма добавления нового комментария -->
+                        <div class="input-group mt-2">
+                            <input type="text" id="comment-text-${post.id}" placeholder="Напишите комментарий..." class="form-control form-control-sm">
+                            <button class="btn btn-primary btn-sm" onclick="addComment(${post.id})">Отправить</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        } catch (error) {
+            console.error("Ошибка генерации фронтенда:", error);
+            container.innerHTML = `<div class="alert alert-danger">Не удалось загрузить посты</div>`;
+        }
+    }
+
+    // 2
+    
+        // 1. ТОТ САМЫЙ ПЕРЕКЛЮЧАТЕЛЬ, КОТОРЫЙ ТЕРЯЛСЯ
+        function toggleComments(postId) {
+        const section = document.getElementById(`comments-section-${postId}`);
+        if (!section) return;
+
+        if (section.style.display === "none" || section.style.display === "") {
+            section.style.display = "block";
+            loadComments(postId); // Запускаем загрузку из базы
+        } else {
+            section.style.display = "none";
+        }
+    }
+
+    // 2. ЗАГРУЗКА КОММЕНТАРИЕВ ИЗ БАЗЫ
+    async function loadComments(postId) {
+        const commentsContainer = document.getElementById(`comments-list-${postId}`);
+        if (!commentsContainer) return;
+
+        try {
+            const response = await fetch(`${API_URL}/posts/${postId}/comments`);
+            if (!response.ok) throw new Error(`Ошибка загрузки комментариев: ${response.status}`);
+            
+            const comments = await response.json();
+            commentsContainer.innerHTML = '';
+
+            if (comments.length === 0) {
+                commentsContainer.innerHTML = '<p class="text-muted small">Комментариев пока нет.</p>';
+                return;
+            }
+
+            comments.forEach(comment => {
+                const commentElement = document.createElement('div');
+                commentElement.className = 'comment-item';
+                commentElement.innerHTML = `
+                    <small class="text-secondary">Пользователь #${comment.user_id || 'Аноним'}</small>
+                    <p class="mb-1">${escapeHtml(comment.text)}</p>
+                `;
+                commentsContainer.appendChild(commentElement);
+            });
+
+        } catch (error) {
+            console.error("Ошибка при получении комментариев:", error);
+            commentsContainer.innerHTML = '<p class="text-danger small">Не удалось загрузить комментарии.</p>';
+        }
+    }
+
+    // 3. ДОБАВЛЕНИЕ НОВОГО КОММЕНТАРИЯ
+    async function addComment(postId) {
+        const commentInput = document.getElementById(`comment-text-${postId}`);
+        if (!commentInput || !commentInput.value.trim()) return;
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (jwtToken) headers['Authorization'] = `Bearer ${jwtToken}`;
+
+        try {
+            const response = await fetch(`${API_URL}/posts/${postId}/comments`, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ text: commentInput.value.trim() })
+            });
+
+            if (!response.ok) throw new Error('Не удалось отправить комментарий. Возможно, требуется авторизация.');
+            
+            commentInput.value = '';
+            await loadComments(postId); 
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // 4. ОПТИМИСТИЧНЫЕ ЛАЙКИ
+    async function toggleLike(postId) {
+        if (!jwtToken) {
+            alert("Лайкать посты могут только авторизованные пользователи!");
+            return;
+        }
+
+        const likeCountSpan = document.getElementById(`like-count-${postId}`);
+        if (!likeCountSpan) return;
+
+        // Визуально увеличиваем сразу для плавной работы интерфейса
+        let currentLikes = parseInt(likeCountSpan.textContent) || 0;
+        likeCountSpan.textContent = currentLikes + 1;
+
+        try {
+            const response = await fetch(`${API_URL}/posts/${postId}/like`, {
+                method: 'POST',
+                headers: { 
+                    'Authorization': `Bearer ${jwtToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error("Бэкенд отклонил токен. Пожалуйста, авторизуйтесь заново!");
+            }
+
+            const data = await response.json();
+            if (data && data.likes_count !== undefined) {
+                likeCountSpan.textContent = data.likes_count;
+            } else if (data && data.likes !== undefined) {
+                likeCountSpan.textContent = data.likes;
+            }
+        } catch (error) {
+            console.error("Ошибка лайка:", error);
+            likeCountSpan.textContent = currentLikes; // Откатываем назад при реальной ошибке
+            alert(error.message);
+        }
+    }
+
+    // Защита от XSS атак
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.innerText = text;
+        return div.innerHTML;
+    }
+
+
+
+    // ================= БЛОК ЗАДАЧ (TODOS) =================
+    async function fetchTodos() {
+        try {
+            const response = await fetch(`${API_URL}/todos/`);
+            if (!response.ok) throw new Error('Ошибка сети');
+            const todos = await response.json();
+            const todoList = document.getElementById('todo-list');
+
+            if (todos.length === 0) {
+                todoList.innerHTML = `<li class="list-group-item text-muted">Задач пока нет.</li>`;
+                return;
+            }
+            
+            todoList.innerHTML = '';
+            todos.forEach(todo => {
+                const li = document.createElement('li');
+                li.className = "list-group-item d-flex justify-content-between align-items-center";
+                const titleText = todo.is_completed ? `<s>${todo.title}</s>` : todo.title;
+                li.innerHTML = `
+                    <span>${titleText}</span>
+                    <button class="btn btn-danger btn-sm delete-btn" data-id="${todo.id}">❌</button>
+                `;
+                todoList.appendChild(li);
+            });
+
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    deleteTodo(e.target.getAttribute('data-id'));
+                });
+            });
+        } catch (error) {
+            document.getElementById('todo-list').innerHTML = `<li class="list-group-item text-danger">Ошибка загрузки</li>`;
+        }
+    }
+
+    async function addTodo() {
+        const titleInput = document.getElementById('todo-title');
+        if (!titleInput || !titleInput.value.trim()) return;
+
+        const todoData = { title: titleInput.value.trim(), description: "Фронтенд JWT" };
+        const headers = { 'Content-Type': 'application/json' };
+        if (jwtToken) headers['Authorization'] = `Bearer ${jwtToken}`;
+
+        try {
+            const response = await fetch(`${API_URL}/todos/`, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(todoData)
+            });
+            if (!response.ok) throw new Error('Ошибка 401: Нужен токен!');
+            titleInput.value = '';
+            await fetchTodos();
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    async function deleteTodo(todoId) {
+        if (!jwtToken) {
+            alert("Удалять задачи могут только авторизованные пользователи!");
+            return;
+        }
+        const headers = { 'Authorization': `Bearer ${jwtToken}` };
+        try {
+            const response = await fetch(`${API_URL}/todos/${todoId}`, { method: 'DELETE', headers: headers });
+            if (!response.ok) throw new Error('Ошибка удаления');
+            await fetchTodos();
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // Защита от XSS атак
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.innerText = text;
+        return div.innerHTML;
+    }
+</script>
+</body>
+</html>

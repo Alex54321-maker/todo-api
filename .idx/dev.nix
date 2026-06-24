@@ -6,6 +6,7 @@
   packages = [
     pkgs.python311
     pkgs.python311Packages.pip
+    pkgs.tree  # Добавили сюда!
   ];
 
   # 3. Переменные окружения

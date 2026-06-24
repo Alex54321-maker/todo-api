@@ -10,6 +10,13 @@ from app.schemas.posts import CommentCreate, CommentResponse
 from app.api.v1.endpoints.auth import get_current_user # Защита токеном
 
 router = APIRouter()
+@router.get("/{post_id}/comments")
+def get_comments(post_id: int, db: Session = Depends(get_db)):
+    """Получить все комментарии к конкретному посту 💬"""
+    # Используем правильный синтаксис SQLModel через db.exec(select(...))
+    comments = db.exec(select(Comment).where(Comment.post_id == post_id)).all()
+    return comments
+
 
 @router.post("/{post_id}/comments", response_model=CommentResponse, status_code=status.HTTP_201_CREATED, summary="Оставить комментарий под постом 💬")
 def create_comment(

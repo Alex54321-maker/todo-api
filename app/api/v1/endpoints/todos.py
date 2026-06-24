@@ -14,23 +14,21 @@ router = APIRouter()
 
 @router.post("/", response_model=TodoResponse, status_code=status.HTTP_201_CREATED, summary="Создать задачу")
 def create_todo(
-    todo_data: TodoCreate, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    db_todo = Todo(**todo_data.model_dump(), user_id=current_user.id)
-    db.add(db_todo)
-    db.commit()
-    db.refresh(db_todo)
-    return db_todo
+        todo_data: TodoCreate, 
+            db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)
+                ):
+                    db_todo = Todo(**todo_data.model_dump(), user_id=current_user.id)
+                    db.add(db_todo)
+                    db.commit()
+                    db.refresh(db_todo)
+                    return db_todo
 
-@router.get("/", response_model=list[TodoResponse], summary="Получить список всех СВОИХ задач")
-def read_todos(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    todos = db.exec(select(Todo).where(Todo.user_id == current_user.id)).all()
-    return todos
+
+@router.get("/", response_model=list[TodoResponse], summary="Получить список ВСЕХ задач (Временно без защиты)")
+def read_todos(db: Session = Depends(get_db)):
+    """Временно открытый эндпоинт, который забирает абсолютно все задачи из БД."""
+    return db.exec(select(Todo)).all()
 
 @router.delete("/{todo_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить свою задачу")
 def delete_todo(
@@ -49,4 +47,3 @@ def delete_todo(
     db.delete(todo)
     db.commit()
     return None
-

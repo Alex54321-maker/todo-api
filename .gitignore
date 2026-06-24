@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 .env
 postgres_data/
+db_data/
+# 2. Открой файл .gitignore в IDX и добавь в самый конец эти строки:
+# project.tar.gz
+# *.db
+# logfile
+# *.lock
