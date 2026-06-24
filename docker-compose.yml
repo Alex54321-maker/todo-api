@@ -1,12 +1,13 @@
+version: '3.8'
+
 services:
   db:
     image: postgres:15-alpine
-    container_name: fastapi_db
-    restart: always
+    container_name: blog_postgres_db
     environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: mydatabase
+      POSTGRES_USER: sanya
+      POSTGRES_PASSWORD: your_secure_password
+      POSTGRES_DB: social_blog
     ports:
       - "5432:5432"
     volumes:
@@ -14,17 +15,18 @@ services:
 
   web:
     build: .
-    container_name: fastapi_web
-    restart: always
+    container_name: fastapi_backend_app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-    ports:
-      - "8000:8000"
+
     volumes:
       - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://sanya:your_secure_password@db:5432/social_blog
     depends_on:
       - db
-    environment:
-      - DATABASE_URL=postgresql://myuser:mypassword@db:5432/mydatabase
 
+# Das hat unten gefehlt! Das sichert deine Datenbank-Daten:
 volumes:
   postgres_data:
