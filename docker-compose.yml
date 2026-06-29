@@ -1,32 +1,68 @@
 version: '3.8'
 
 services:
+  # 1. База данных PostgreSQL
   db:
-    image: postgres:15-alpine
-    container_name: blog_postgres_db
+    image: postgres:16
+    container_name: micro_postgres_db
+    restart: always
     environment:
-      POSTGRES_USER: sanya
-      POSTGRES_PASSWORD: your_secure_password
-      POSTGRES_DB: social_blog
+      - POSTGRES_USER=alex_user
+      - POSTGRES_PASSWORD=alex_secure_password
+      - POSTGRES_DB=micro_todo_db
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alex_user -d micro_todo_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - micro_network
 
-  web:
-    build: .
-    container_name: fastapi_backend_app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-    volumes:
-      - .:/app
-    ports:
-      - "8000:8000"
+  # 2. Микросервис Авторизации (Auth-Service)
+  auth_service:
+    build: ./auth_service
+    container_name: auth_microservice
+    restart: always
     environment:
-      - DATABASE_URL=postgresql://sanya:your_secure_password@db:5432/social_blog
+      - DATABASE_URL=postgresql://alex_user:alex_secure_password@db:5432/micro_todo_db
+      - JWT_SECRET=super_secret_key_123
     depends_on:
-      - db
+      db:
+        condition: service_healthy # Ждем, пока база РЕАЛЬНО проснется
+    networks:
+      - micro_network
 
-# Das hat unten gefehlt! Das sichert deine Datenbank-Daten:
-volumes:
-  postgres_data:
+  # 3. Микросервис Задач (Task-Service)
+  task_service:
+    build: ./task_service
+    container_name: task_microservice
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://alex_user:alex_secure_password@db:5432/micro_todo_db
+      - JWT_SECRET=super_secret_key_123
+    depends_on:
+      db:
+        condition: service_healthy # Ждем, пока база РЕАЛЬНО проснется
+    networks:
+      - micro_network
+
+  # 4. Шлюз Маршрутизации (Gateway Nginx)
+  gateway:
+    image: nginx:alpine
+    container_name: nginx_gateway
+    restart: always
+    ports:
+      - "8000:80" # Пробрасываем порт 8000 наружу в IDX
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - auth_service
+      - task_service
+    networks:
+      - micro_network
+
+networks:
+  micro_network:
+    driver: bridge
