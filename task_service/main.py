@@ -1,3 +1,4 @@
+import httpx
 from fastapi import FastAPI, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from jwt import decode, PyJWTError
@@ -14,6 +15,21 @@ Base.metadata.create_all(bind=engine)
 # Секретный ключ должен быть ТОЧНО ТАКИМ ЖЕ, как в auth_service, чтобы расшифровать токен
 JWT_SECRET = "super_secret_key_123"
 JWT_ALGORITHM = "HS256"
+
+# URL для внутренних межсервисных запросов в сети Docker Compose
+AUTH_SERVICE_URL = "http://auth_service:8000/internal/users"
+
+# Вспомогательная асинхронная функция для проверки пользователя в соседнем сервисе
+async def verify_user_exists(user_id: int) -> bool:
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{AUTH_SERVICE_URL}/{user_id}", timeout=2.0)
+            return response.status_code == 200
+        except httpx.RequestError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Auth service is temporarily unavailable"
+            )
 
 # Функция-зависимость (Dependency) для проверки токена и извлечения user_id
 def get_current_user_id(authorization: str = Header(...)) -> int:
@@ -34,9 +50,17 @@ def get_current_user_id(authorization: str = Header(...)) -> int:
     except (PyJWTError, ValueError):
         raise HTTPException(status_code=401, detail="Could not validate credentials")
 
-# 1. Создание новой задачи для текущего пользователя
+# 1. Создание новой задачи для текущего пользователя (СДЕЛАНА АСИНХРОННОЙ)
 @app.post("/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-def create_task(task_data: TaskCreate, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+async def create_task(task_data: TaskCreate, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    # МИДЛОВСКИЙ КОНТРОЛЬ: Проверяем, существует ли пользователь в auth_service
+    user_exists = await verify_user_exists(user_id)
+    if not user_exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found in auth system"
+        )
+
     new_task = Task(
         title=task_data.title,
         description=task_data.description,

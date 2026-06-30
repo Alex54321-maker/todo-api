@@ -13,7 +13,7 @@ Base.metadata.create_all(bind=engine)
 # 1. Эндпоинт РЕГИСТРАЦИИ нового пользователя
 @app.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    # Проверяем, нет ли уже пользователя с таким email (одной проверки достаточно)
+    # Проверяем, нет ли уже пользователя с таким email
     db_user = db.query(User).filter(User.email == user_data.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -35,7 +35,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 # 2. Эндпоинт ЛОГИНА (Вход по email и выдача JWT-токена)
 @app.post("/login", response_model=Token)
 def login(login_data: UserLogin, db: Session = Depends(get_db)):
-    # Ищем пользователя в базе по его email (заменили username на email)
+    # Ищем пользователя в базе по его email
     user = db.query(User).filter(User.email == login_data.email).first()
     
     # Если юзер не найден или пароль не совпал с хэшем — выдаем 401 ошибку
@@ -49,3 +49,14 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
     # Зашиваем внутрь токена ID и email пользователя
     access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
+
+# 3. ВНУТРЕННИЙ ЭНДПОИНТ (Для проверки существования пользователя из task_service)
+@app.get("/internal/users/{user_id}")
+def check_user_exists(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User does not exist"
+        )
+    return {"status": "active", "user_id": user_id}
