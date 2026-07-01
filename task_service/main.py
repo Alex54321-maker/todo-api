@@ -7,7 +7,8 @@ from schemas import TaskCreate, TaskResponse, TaskUpdate
 from database import engine, Base, get_db
 from models import Task
 
-app = FastAPI(title="Task Microservice", version="1.0.0")
+app = FastAPI(title="Task Microservice", version="1.0.0", root_path="/api/tasks")
+
 
 # Автоматически создаем таблицу tasks в базе данных при старте
 Base.metadata.create_all(bind=engine)
@@ -76,3 +77,45 @@ async def create_task(task_data: TaskCreate, db: Session = Depends(get_db), user
 def get_tasks(db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
     tasks = db.query(Task).filter(Task.user_id == user_id).all()
     return tasks
+
+# 3. Обновление задачи с жесткой проверкой прав владельца
+@app.put("/{task_id}", response_model=TaskResponse)
+def update_task(task_id: int, task_data: TaskUpdate, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    # Ищем задачу в БД
+    task = db.query(Task).filter(Task.id == task_id).first()
+    
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        
+    # МИДЛОВСКИЙ КОНТРОЛЬ: Проверяем, что текущий юзер — хозяин этой задачи
+    if task.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to modify this task")
+        
+    # Обновляем только те поля, которые пришли в запросе
+    if task_data.title is not None:
+        task.title = task_data.title
+    if task_data.description is not None:
+        task.description = task_data.description
+    if task_data.is_completed is not None:
+        task.is_completed = task_data.is_completed
+        
+    db.commit()
+    db.refresh(task)
+    return task
+
+# 4. Удаление задачи с жесткой проверкой прав владельца
+@app.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(task_id: int, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    # Ищем задачу в БД
+    task = db.query(Task).filter(Task.id == task_id).first()
+    
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        
+    # МИДЛОВСКИЙ КОНТРОЛЬ: Проверяем права на удаление
+    if task.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to delete this task")
+        
+    db.delete(task)
+    db.commit()
+    return None

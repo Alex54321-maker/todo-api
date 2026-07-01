@@ -9,9 +9,11 @@ class TaskBase(BaseModel):
 class TaskCreate(TaskBase):
     pass
 
-# 3. Схема для обновления статуса задачи (выполнена/не выполнена)
+# 3. Схема для обновления задачи (сделали все поля опциональными для гибкости)
 class TaskUpdate(BaseModel):
-    is_completed: bool
+    title: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = Field(None, max_length=500)
+    is_completed: bool | None = Field(None)
 
 # 4. Схема для ответа сервера (клиент увидит ID, статус и привязку к юзеру)
 class TaskResponse(TaskBase):
