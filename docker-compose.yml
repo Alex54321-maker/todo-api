@@ -48,7 +48,20 @@ services:
     networks:
       - micro_network
 
-  # 4. Шлюз Маршрутизации (Gateway Nginx)
+  # 4. Брокер сообщений RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_broker
+    restart: always
+    ports:
+      - "5672:5672"   # Порт для AMQP протокола (микросервисы)
+      - "15672:15672" # Порт для веб-панели управления (менеджмент-консоль)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - micro_network # Исправлено на общую сеть проекта
+
+  # 5. Шлюз Маршрутизации (Gateway Nginx)
   gateway:
     image: nginx:alpine
     container_name: nginx_gateway
@@ -63,6 +76,11 @@ services:
     networks:
       - micro_network
 
+# Глобальные тома вынесены в самый низ без лишних сервисов внутри
+volumes:
+  rabbitmq_data:
+
+# Глобальные сети
 networks:
   micro_network:
     driver: bridge

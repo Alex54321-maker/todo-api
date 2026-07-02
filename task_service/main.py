@@ -6,8 +6,24 @@ from jwt import decode, PyJWTError
 from schemas import TaskCreate, TaskResponse, TaskUpdate
 from database import engine, Base, get_db
 from models import Task
+import asyncio
+from contextlib import asynccontextmanager
+from worker import start_worker  # Импортируем наш воркер
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Данный код выполнится ДО того, как FastAPI начнет принимать запросы
+    worker_task = asyncio.create_task(start_worker()) # Запускаем воркер в фоне
+    yield
+    # Данный код выполнится при выключении микросервиса
+    worker_task.cancel()
 
-app = FastAPI(title="Task Microservice", version="1.0.0", root_path="/api/tasks")
+app = FastAPI(
+    title="Task Microservice", 
+    version="1.0.0", 
+    root_path="/api/tasks",
+    lifespan=lifespan  # Подключаем жизненный цикл
+)
+
 
 
 # Автоматически создаем таблицу tasks в базе данных при старте
