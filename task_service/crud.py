@@ -31,3 +31,10 @@ def update_user_task(db: Session, task: Task, task_data: TaskUpdate) -> Task:
 def delete_user_task(db: Session, task: Task) -> None:
     db.delete(task)
     db.commit()
+# Допиши это в самый конец файла crud.py
+
+def delete_all_user_tasks(db: Session, user_id: int) -> int:
+    """Удаляет все задачи, принадлежащие конкретному пользователю."""
+    deleted_count = db.query(Task).filter(Task.user_id == user_id).delete()
+    db.commit()
+    return deleted_count

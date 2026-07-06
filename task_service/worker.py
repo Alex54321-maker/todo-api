@@ -1,35 +1,44 @@
 import json
 import asyncio
 import aio_pika
-import socket
+# Удаляем прямой импорт Task, импортируем наш crud-слой
+import crud 
 from sqlalchemy.orm import Session
 from database import engine
-from models import Task
 
 RABBITMQ_URL = "amqp://guest:guest@rabbitmq:5672/"
 
-def delete_user_tasks_sync(user_id: int):
-    """Синхронная функция для удаления задач из БД."""
+def process_user_deletion_sync(user_id: int):
+    """Синхронная обертка для выполнения CRUD-операции в контексте сессии."""
     with Session(bind=engine) as db:
         try:
-            deleted_count = db.query(Task).filter(Task.owner_id == user_id).delete()
-            db.commit()
-            print(f"[WORKER] Успешно удалено {deleted_count} задач для user_id={user_id}")
+            # Вызываем изолированную функцию из crud.py с правильным полем user_id
+            deleted_count = crud.delete_all_user_tasks(db, user_id)
+            print(f"[WORKER] Успешно вычищено {deleted_count} задач для user_id={user_id}")
         except Exception as e:
             db.rollback()
-            print(f"[WORKER DATABASE ERROR] Ошибка удаления задач: {e}")
+            print(f"[WORKER DATABASE ERROR] Ошибка при удалении задач юзера {user_id}: {e}")
+            raise e # Пробрасываем ошибку выше, чтобы воркер знал о сбое
 
 async def process_message(message: aio_pika.IncomingMessage):
     """Обработчик входящих сообщений из RabbitMQ."""
-    async with message.process():
+    # Используем ручное подтверждение/отклонение для безопасности данных
+    async with message.process(requeue=True): 
         try:
             payload = json.loads(message.body.decode())
             user_id = payload.get("user_id")
+            
             if user_id:
                 print(f"[WORKER] Получено событие удаления пользователя: user_id={user_id}")
-                await asyncio.to_thread(delete_user_tasks_sync, user_id)
+                # Выполняем синхронный тяжелый запрос к БД в отдельном потоке
+                await asyncio.to_thread(process_user_deletion_sync, user_id)
+            else:
+                print(f"[WORKER WARNING] В сообщении отсутствует user_id: {payload}")
+                
         except Exception as e:
-            print(f"[WORKER ERROR] Ошибка обработки сообщения: {e}")
+            print(f"[WORKER ERROR] Критическая ошибка обработки сообщения: {e}")
+            # Благодарю асинхронному контексту message.process(requeue=True), 
+            # при вылете исключения сообщение вернется в очередь RabbitMQ и не пропадет.
 
 async def wait_for_rabbitmq(host="rabbitmq", port=5672, timeout=30):
     """Ждет, пока порт RabbitMQ реально начнет принимать входящие соединения."""
