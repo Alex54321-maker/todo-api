@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-
+from typing import List, Dict
 # 1. Базовые поля для задачи
 class TaskBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=100)
@@ -23,3 +23,14 @@ class TaskResponse(TaskBase):
 
     # Включаем чтение данных из моделей SQLAlchemy (Pydantic v2)
     model_config = {"from_attributes": True}
+
+
+# Что мы ждем от task_service
+class LikesBatchRequest(BaseModel):
+    entity_ids: List[int]
+
+# Что мы отдаем обратно: { "1": 5, "2": 10 }
+# (В JSON ключи словаря всегда будут строками, это нормально)
+# НАПИШИТЕ ВОТ ТАК:
+LikesBatchResponse = Dict[str, int]
+

@@ -1,25 +1,50 @@
 { pkgs, ... }: {
-  # 1. Канал пакетов (можно оставить 23.11, но для Docker лучше 24.05+)
+  # 1. Канал пакетов 
   channel = "stable-24.05";
 
-  # 2. Системные пакеты (PostgreSQL здесь больше не нужен, он будет в Docker!)
+  # 2. Системные пакеты
   packages = [
     pkgs.python311
     pkgs.python311Packages.pip
-    pkgs.tree  # Добавили сюда!
+    pkgs.tree  
+    pkgs.ruff  
+    pkgs.docker-compose
   ];
 
   # 3. Переменные окружения
   env = {};
 
-  # 4. Настройки интерфейса IDX
+  # 4. Настройки интерфейса IDX (плагины)
   idx = {
     extensions = [
       "ms-python.python"
-      "ms-azuretools.vscode-docker" # Добавили удобный плагин для Docker
+      "ms-azuretools.vscode-docker" 
+      "charliermarsh.ruff"
     ];
+
+    workspace = {
+      onCreate = {};
+      onStart = {};
+    };
+       # ======= ВСТАВИТЬ ЭТОТ БЛОК СЮДА =======
+    previews = {
+      enable = true;
+      previews = {
+        web = {
+          command = [ "sleep" "infinity" ];
+          manager = "web";
+          env = {
+            PORT = "8000";
+          };
+        };
+      };
+    };
+    # =======================================
   };
 
-  # 5. 🎯 ОТКЛЮЧАЕМ СЛУЖБУ POSTGRES И ВКЛЮЧАЕМ DOCKER
+  
+
+  # 5. СЛУЖБА DOCKER ВКЛЮЧЕНА
   services.docker.enable = true; 
+  
 }

@@ -36,8 +36,8 @@
 
     <script>
     
-        // НАСТОЯЩИЙ И ПРАВИЛЬНЫЙ АДРЕС ТВОЕГО ШЛЮЗА:
-        const API_URL = "https://8000-firebase-todo-api-1780255878457.cluster-64pjnskmlbaxowh5lzq6i7v4ra.cloudworkstations.dev";
+        // 🔥 ИСПРАВЛЕНО: window.location.origin автоматически возьмет рабочий внешний адрес IDX
+        const API_URL = window.location.origin;
 
         console.log("📡 Фронтенд успешно настроен на шлюз Nginx:", API_URL);
 
@@ -84,7 +84,7 @@
             });
         }
 
-        // 3. Отправка лайка (ИССПРАВЛЕНО: ТОЧНЫЙ ПУТЬ ДЛЯ ШЛЮЗА БЕЗ ЛИШНИХ ЗАПЯТЫХ)
+        // 3. Отправка лайка (ИССПРАВЛЕНО: ТОЧНЫЙ ПУТЬ С ДВУМЯ СЛЭШАМИ ДЛЯ ТВОЕГО ШЛЮЗА NGINX)
         async function sendLike(taskId) {
             const countSpan = document.getElementById(`like-count-${taskId}`);
             if (countSpan) {
@@ -92,7 +92,7 @@
             }
 
             try {
-                const response = await fetch(`${API_URL}/api/likes/toggle?user_id=1&task_id=${taskId}`, {
+                const response = await fetch(`${API_URL}/api/likes//toggle?user_id=1&task_id=${taskId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include'
