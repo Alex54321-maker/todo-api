@@ -37,7 +37,7 @@
     <script>
     
         // НАСТОЯЩИЙ И ПРАВИЛЬНЫЙ АДРЕС ТВОЕГО ШЛЮЗА:
-        const API_URL = "https://8000-firebase-todo-api-1780255878457.cluster-64pjnskmlbaxowh5lzq6i7v4ra.cloudworkstations.dev";
+        const API_URL = "https://cloudworkstations.dev";
 
         console.log("📡 Фронтенд успешно настроен на шлюз Nginx:", API_URL);
 
@@ -48,14 +48,42 @@
             { id: 2, title: "Вывести лайки на фронтенд", description: "Написать fetch запросы на JS", likes: 105 }
         ];
 
-        // 1. Получение списка задач с бэкенда (ЧИСТО И С API_URL)
+        // 1. Получение списка задач и пакетная подгрузка лайков (BATCH)
         async function fetchTasks() {
             try {
+                // А. Запрашиваем задачи из task_service
                 const response = await fetch(`${API_URL}/api/tasks`, { 
                     credentials: 'include' 
                 });
                 if (!response.ok) throw new Error('Бэкенд вернул ошибку');
-                const tasks = await response.json();
+                let tasks = await response.json();
+
+                // Б. Пакетный запрос лайков из social_service через /api/v1/likes/batch
+                if (tasks.length > 0) {
+                    try {
+                        const taskIds = tasks.map(t => t.id); // Собираем массив ID [1, 2, 3...]
+                        
+                        const likesResponse = await fetch(`${API_URL}/api/v1/likes/batch`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ task_ids: taskIds }),
+                            credentials: 'include'
+                        });
+
+                        if (likesResponse.ok) {
+                            const likesMap = await likesResponse.json(); // Формат ответа: { "1": 5, "2": 12 }
+                            
+                            // Подмешиваем реальное число лайков к каждой задаче
+                            tasks = tasks.map(task => ({
+                                ...task,
+                                likes: likesMap[task.id] || 0
+                            }));
+                        }
+                    } catch (likeError) {
+                        console.warn("Не удалось пакетно обновить лайки из social_service:", likeError);
+                    }
+                }
+
                 renderTasks(tasks);
             } catch (error) {
                 console.warn("Реальный бэкенд пока пустой или недоступен, показываем тестовые данные:", error);
@@ -84,7 +112,7 @@
             });
         }
 
-        // 3. Отправка лайка (ИССПРАВЛЕНО: ТОЧНЫЙ ПУТЬ ДЛЯ ШЛЮЗА БЕЗ ЛИШНИХ ЗАПЯТЫХ)
+        // 3. Отправка лайка (Оптимистичный интерфейс: счетчик растет мгновенно)
         async function sendLike(taskId) {
             const countSpan = document.getElementById(`like-count-${taskId}`);
             if (countSpan) {

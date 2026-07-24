@@ -76,10 +76,13 @@ services:
     build: ./task_service
     container_name: task_microservice
     restart: always
+    ports:
+      - "8001:8001"  # <- ДОБАВЬ ЭТУ СТРОЧКУ СЮДА 🎯
     environment:
       - DATABASE_URL=postgresql://alex_user:alex_secure_password@db:5432/micro_todo_db
       - JWT_SECRET=super_secret_key_123
       - PYTHONUNBUFFERED=1
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
     command: bash -c "sleep 25 && uvicorn main:app --host 0.0.0.0 --port 8001"
     depends_on:
       - db
@@ -94,6 +97,7 @@ services:
     restart: always
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@social_db:5432/micro_social_db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - PYTHONUNBUFFERED=1
     command: uvicorn main:app --host 0.0.0.0 --port 8003
     volumes:
@@ -106,15 +110,20 @@ services:
     networks:
       - micro_network
 
-  # 5. Фоновый процесс для обработки очередей соцсети
+  # 5. Фоновый процесс для обработки очередей соцсети (НАШ ВОРКЕР) 🚀
   social_worker:
     build: ./social_service
     container_name: social_worker_service
     restart: always
     command: python worker.py
     environment:
+      # Передаем асинхронный драйвер asyncpg для SQLAlchemy
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@social_db:5432/micro_social_db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - PYTHONUNBUFFERED=1
     depends_on:
+      social_db:
+        condition: service_healthy  # Ждем, пока база соцсети полностью запустится
       rabbitmq:
         condition: service_started
     networks:
